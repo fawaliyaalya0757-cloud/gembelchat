@@ -352,6 +352,8 @@ const statTime=document.getElementById('stat-time');
 
 let msgCount=0,reqCount=0,errCount=0;
 const chatHistory=[];
+let GROK_API_KEY=localStorage.getItem('grok_api_key')||'';
+if(!GROK_API_KEY){GROK_API_KEY=prompt('Masukkan xAI API Key kamu (dari console.x.ai):')||'';if(GROK_API_KEY)localStorage.setItem('grok_api_key',GROK_API_KEY);}
 
 function getTime(){return new Date().toTimeString().slice(0,8);}
 function updateClock(){clockEl.textContent=getTime();}
@@ -420,9 +422,9 @@ async function send(){
       {role:'system', content:'Kamu adalah AI assistant yang santai, gaul, dan helpful. Jawab dalam Bahasa Indonesia yang asik dan natural. Singkat dan padat kecuali diminta detail. Jangan pake markdown, tulis plain text aja.'},
       ...chatHistory
     ];
-    const res=await fetch('/chat',{
+    const res=await fetch('https://api.x.ai/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROK_API_KEY},
       body:JSON.stringify({
         model:'grok-3-mini',
         max_tokens:1000,
