@@ -115,6 +115,30 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .tok-count{margin-left:auto}.tok-count.active{color:var(--amber)}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99}
 
+/* ATTACH BUTTON & DROPDOWN */
+.attach-wrap{position:relative;flex-shrink:0}
+.attach-btn{height:40px;width:40px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:18px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;line-height:1}
+.attach-btn:hover{border-color:var(--green2);color:var(--green);background:var(--green-dim)}
+.attach-btn.active{border-color:var(--green2);color:var(--green);background:var(--green-dim)}
+.attach-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--bg3);border:1px solid var(--border2);min-width:220px;z-index:200;animation:fadein .15s ease;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.attach-menu.show{display:block}
+.attach-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;font-size:12px;color:var(--text);letter-spacing:.5px;transition:all .15s;border-bottom:1px solid var(--border)}
+.attach-item:last-child{border-bottom:none}
+.attach-item:hover{background:var(--green-dim);color:var(--green2)}
+.attach-item .attach-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.attach-item .attach-lbl{flex:1}.attach-item .attach-sub{font-size:9px;color:var(--text3);letter-spacing:1px}
+
+/* FILE PREVIEW */
+.file-preview-bar{display:none;padding:6px 16px;background:var(--bg3);border-top:1px solid var(--border2);flex-shrink:0;gap:6px;flex-wrap:wrap}
+.file-preview-bar.show{display:flex}
+.file-chip{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border3);padding:4px 8px;font-size:10px;color:var(--cyan2);max-width:200px}
+.file-chip img{width:28px;height:28px;object-fit:cover;border:1px solid var(--border3)}
+.file-chip .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.file-chip .fsize{color:var(--text3);font-size:9px}
+.file-chip .fremove{cursor:pointer;color:var(--red);margin-left:4px;font-size:13px;line-height:1;flex-shrink:0}
+.file-chip .fremove:hover{color:#ff6677}
+#fileInputHidden,#imageInputHidden{display:none}
+
 /* RESPONSIVE */
 @media(max-width:768px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);box-shadow:4px 0 20px rgba(0,0,0,.5)}
@@ -230,9 +254,31 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <script src="https://enteringlacquergiant.com/4998e547fa966cf16147ab85c17a9bba/invoke.js"></script>
     </div>
 
+    <!-- File preview bar -->
+    <div class="file-preview-bar" id="filePreviewBar"></div>
+
     <div class="input-bar">
       <div class="input-prompt">ketik pesan di sini...</div>
       <div class="input-row">
+        <!-- Attach button -->
+        <div class="attach-wrap">
+          <button class="attach-btn" id="attachBtn" onclick="toggleAttachMenu(event)" title="Lampirkan file">+</button>
+          <div class="attach-menu" id="attachMenu">
+            <div class="attach-item" onclick="triggerFileUpload()">
+              <span class="attach-icon">📎</span>
+              <div><div class="attach-lbl">Tambahkan file atau foto</div><div class="attach-sub">JPG, PNG, PDF, TXT, ...</div></div>
+            </div>
+            <div class="attach-item" onclick="captureScreenshot()">
+              <span class="attach-icon">📷</span>
+              <div><div class="attach-lbl">Ambil tangkapan layar</div><div class="attach-sub">Screenshot layar</div></div>
+            </div>
+            <div class="attach-item" onclick="addToProject()">
+              <span class="attach-icon">📁</span>
+              <div><div class="attach-lbl">Tambah ke proyek</div><div class="attach-sub">Simpan ke sesi proyek</div></div>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="fileInputHidden" accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css" multiple onchange="handleFileSelect(event)">
         <div class="input-wrap">
           <textarea class="chat-input" id="chatInput" placeholder="ketik pesan di sini..." rows="1"
             onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -252,6 +298,126 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 const WORKER_URL = 'https://little-dust-12a7.fawaliyaalya0757.workers.dev/chat';
 
 let history=[],isStreaming=false,controller=null,totalTokens=0,reqCount=0,errCount=0,msgCount=0;
+let attachedFiles=[]; // {name, size, type, dataUrl, base64, text}
+
+/* ── ATTACH MENU ── */
+function toggleAttachMenu(e){
+  e.stopPropagation();
+  const menu=document.getElementById('attachMenu');
+  const btn=document.getElementById('attachBtn');
+  const isOpen=menu.classList.contains('show');
+  menu.classList.toggle('show',!isOpen);
+  btn.classList.toggle('active',!isOpen);
+}
+document.addEventListener('click',()=>{
+  document.getElementById('attachMenu').classList.remove('show');
+  document.getElementById('attachBtn').classList.remove('active');
+});
+function closeAttachMenu(){
+  document.getElementById('attachMenu').classList.remove('show');
+  document.getElementById('attachBtn').classList.remove('active');
+}
+
+function triggerFileUpload(){
+  closeAttachMenu();
+  document.getElementById('fileInputHidden').click();
+}
+
+function handleFileSelect(e){
+  const files=Array.from(e.target.files);
+  if(!files.length)return;
+  files.forEach(f=>processFile(f));
+  e.target.value='';
+}
+
+function processFile(file){
+  const reader=new FileReader();
+  const isImage=file.type.startsWith('image/');
+  reader.onload=ev=>{
+    const dataUrl=ev.target.result;
+    const base64=dataUrl.split(',')[1];
+    const entry={name:file.name,size:file.size,type:file.type,dataUrl:isImage?dataUrl:null,base64,isImage};
+    // if text file, also store text
+    if(!isImage&&(file.type.startsWith('text/')||/\.(txt|md|csv|json|js|py|html|css)$/i.test(file.name))){
+      const tr=new FileReader();
+      tr.onload=te=>{entry.text=te.target.result;attachedFiles.push(entry);renderFilePreviews();};
+      tr.readAsText(file);
+    } else {
+      attachedFiles.push(entry);
+      renderFilePreviews();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderFilePreviews(){
+  const bar=document.getElementById('filePreviewBar');
+  if(!attachedFiles.length){bar.className='file-preview-bar';bar.innerHTML='';return;}
+  bar.className='file-preview-bar show';
+  bar.innerHTML=attachedFiles.map((f,i)=>`
+    <div class="file-chip">
+      ${f.isImage?`<img src="${f.dataUrl}" alt="${f.name}">`:'<span style="font-size:18px">📄</span>'}
+      <div>
+        <div class="fname">${f.name}</div>
+        <div class="fsize">${formatSize(f.size)}</div>
+      </div>
+      <span class="fremove" onclick="removeFile(${i})" title="Hapus">×</span>
+    </div>`).join('');
+}
+
+function removeFile(i){
+  attachedFiles.splice(i,1);
+  renderFilePreviews();
+}
+
+function formatSize(b){
+  if(b<1024)return b+'B';
+  if(b<1048576)return (b/1024).toFixed(1)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+
+async function captureScreenshot(){
+  closeAttachMenu();
+  try{
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always'},audio:false});
+    const video=document.createElement('video');
+    video.srcObject=stream;
+    await new Promise(r=>{video.onloadedmetadata=r;video.play();});
+    const canvas=document.createElement('canvas');
+    canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0);
+    stream.getTracks().forEach(t=>t.stop());
+    const dataUrl=canvas.toDataURL('image/png');
+    const base64=dataUrl.split(',')[1];
+    const name='screenshot_'+Date.now()+'.png';
+    attachedFiles.push({name,size:Math.round(base64.length*0.75),type:'image/png',dataUrl,base64,isImage:true});
+    renderFilePreviews();
+    addLog('Screenshot ditambahkan','ok');
+  }catch(err){
+    if(err.name!=='NotAllowedError')addLog('Screenshot gagal: '+err.message,'err');
+  }
+}
+
+function addToProject(){
+  closeAttachMenu();
+  const text=document.getElementById('chatInput').value.trim();
+  const projectKey='gembelchat_project_'+Date.now();
+  const data={text,files:attachedFiles.map(f=>f.name),time:new Date().toISOString()};
+  try{
+    const saved=JSON.parse(localStorage.getItem('gembelchat_project')||'[]');
+    saved.push(data);
+    localStorage.setItem('gembelchat_project',JSON.stringify(saved));
+    addLog('Ditambahkan ke proyek ('+saved.length+' item)','ok');
+    showToast('✅ Ditambahkan ke proyek!');
+  }catch(e){addLog('Gagal simpan proyek','err');}
+}
+
+function showToast(msg){
+  let t=document.getElementById('toastEl');
+  if(!t){t=document.createElement('div');t.id='toastEl';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--green2);color:var(--green);padding:8px 18px;font-family:var(--mono);font-size:12px;letter-spacing:1px;z-index:9998;animation:fadein .2s ease';document.body.appendChild(t);}
+  t.textContent=msg;t.style.display='block';
+  clearTimeout(t._tm);t._tm=setTimeout(()=>t.style.display='none',2500);
+}
 
 function pad(n){return String(n).padStart(2,'0')}
 function getTimeStr(){const n=new Date();return pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds())}
@@ -331,8 +497,34 @@ async function sendMessage(){
 
   document.getElementById('errBar').style.display='none';
   input.value='';input.style.height='auto';
-  history.push({role:'user',content:text});
-  addMessage('user',text);msgCount++;
+
+  // Build user content with attachments
+  let userContent;
+  if(attachedFiles.length){
+    const parts=[];
+    attachedFiles.forEach(f=>{
+      if(f.isImage){
+        parts.push({type:'image',source:{type:'base64',media_type:f.type,data:f.base64}});
+      } else if(f.text){
+        parts.push({type:'text',text:`[File: ${f.name}]\n\`\`\`\n${f.text}\n\`\`\``});
+      }
+    });
+    parts.push({type:'text',text});
+    userContent=parts;
+  } else {
+    userContent=text;
+  }
+
+  // Display user message with file previews
+  const fileNames=attachedFiles.map(f=>f.name);
+  addMessage('user', fileNames.length?'['+fileNames.join(', ')+']\n'+text:text);
+
+  // Clear attachments
+  attachedFiles=[];
+  renderFilePreviews();
+
+  history.push({role:'user',content:userContent});
+  msgCount++;
 
   isStreaming=true;reqCount++;
   document.getElementById('sendBtn').disabled=true;
