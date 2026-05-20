@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GembelChat v1.0 — AI Terminal [GROK]</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#070a07;
+  --bg2:#0a0d0a;
+  --bg3:#0d110d;
+  --border:#162016;
+  --border2:#1e2e1e;
+  --green:#00ff88;
+  --green-dim:#00cc66;
+  --green-dark:#003a1a;
+  --green-faint:#00ff8811;
+  --text:#b8ccb8;
+  --text-dim:#5a7a5a;
+  --text-muted:#334433;
+  --amber:#ffaa00;
+  --red:#ff4444;
+  --blue:#44aaff;
+  --cyan:#00ffcc;
+}
+html,body{height:100%;background:var(--bg);overflow:hidden;}
+body{font-family:'Share Tech Mono',monospace;color:var(--text);font-size:13px;}
+
+/* scanline effect */
+body::after{
+  content:'';
+  position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);
+  pointer-events:none;z-index:9999;
+}
+
+/* layout */
+.app{display:flex;height:100vh;border:1px solid var(--border2);}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:220px;min-width:220px;
+  background:var(--bg2);
+  border-right:1px solid var(--border2);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  transition:width .2s, min-width .2s;
+}
+.sidebar.collapsed{width:0;min-width:0;border-right:none;}
+.sidebar-toggle{
+  position:fixed;top:10px;left:10px;z-index:100;
+  background:var(--bg3);border:1px solid var(--border2);
+  color:var(--green);font-size:14px;
+  width:28px;height:28px;
+  display:none;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.sidebar-header{
+  padding:12px 14px;
+  border-bottom:1px solid var(--border2);
+  background:var(--bg3);
+}
+.logo-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.logo-icon{
+  width:28px;height:28px;
+  border:1px solid var(--green);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--green);font-size:14px;
+}
+.logo-text{color:var(--green);font-size:13px;letter-spacing:3px;font-family:'VT323',monospace;font-size:18px;}
+.logo-badge{
+  display:inline-block;
+  background:var(--green-faint);
+  border:1px solid var(--green-dark);
+  color:var(--green);
+  font-size:9px;padding:1px 6px;letter-spacing:1px;
+}
+.sidebar-sub{color:var(--text-muted);font-size:9px;letter-spacing:2px;margin-top:2px;}
+
+.section-label{
+  color:var(--text-muted);font-size:9px;letter-spacing:2px;
+  padding:8px 14px 4px;
+  border-top:1px solid var(--border);
+  margin-top:1px;
+}
+.section-label:first-of-type{margin-top:0;border-top:none;}
+
+/* stat cards */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);margin:0 0 1px;}
+.stat-cell{background:var(--bg2);padding:8px 10px;text-align:center;}
+.stat-num{font-family:'VT323',monospace;font-size:22px;color:var(--amber);line-height:1;}
+.stat-num.ok{color:var(--green);}
+.stat-num.err{color:var(--red);}
+.stat-lbl{color:var(--text-muted);font-size:8px;letter-spacing:1px;margin-top:2px;}
+
+/* live log */
+.live-log{
+  flex:1;overflow-y:auto;
+  padding:6px 10px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.live-log::-webkit-scrollbar{width:3px;}
+.live-log::-webkit-scrollbar-thumb{background:var(--green-dark);}
+.log-entry{font-size:10px;line-height:1.5;word-break:break-all;opacity:0;animation:fadein .3s forwards;}
+@keyframes fadein{to{opacity:1}}
+.lt{color:var(--text-muted);}
+.li{color:var(--text-dim);}
+.lok{color:var(--green);}
+.lw{color:var(--amber);}
+.le{color:var(--red);}
+.lu{color:var(--blue);}
+.la{color:var(--cyan);}
+
+/* status bar */
+.status-bar{
+  padding:8px 14px;
+  border-top:1px solid var(--border2);
+  display:flex;align-items:center;gap:8px;
+  background:var(--bg3);
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+.dot.busy{background:var(--amber);animation:blink-dot 0.5s infinite;}
+.dot.err{background:var(--red);}
+@keyframes blink-dot{0%,100%{opacity:1}50%{opacity:0.2}}
+.status-text{font-size:10px;color:var(--text-dim);letter-spacing:1px;}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg);}
+
+/* topbar */
+.topbar{
+  padding:10px 18px;
+  border-bottom:1px solid var(--border2);
+  background:var(--bg3);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.topbar-title{color:var(--green);font-size:13px;letter-spacing:2px;}
+.topbar-sub{color:var(--text-muted);font-size:10px;}
+.topbar-right{display:flex;align-items:center;gap:16px;}
+.clock{font-family:'VT323',monospace;font-size:20px;color:var(--green);}
+.mode-badge{
+  background:var(--green-faint);
+  border:1px solid var(--green-dark);
+  color:var(--green-dim);
+  font-size:9px;padding:2px 8px;letter-spacing:2px;
+}
+
+/* messages */
+.messages{
+  flex:1;overflow-y:auto;
+  padding:16px 18px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.messages::-webkit-scrollbar{width:4px;}
+.messages::-webkit-scrollbar-thumb{background:var(--border2);}
+
+.msg{display:flex;flex-direction:column;gap:3px;animation:slide-in .2s ease;}
+@keyframes slide-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.msg-meta{font-size:10px;color:var(--text-muted);}
+.msg-meta .tag{color:var(--green);}
+.msg.user .msg-meta{text-align:right;}
+.msg.user .msg-meta .tag{color:var(--blue);}
+
+.bubble{
+  padding:10px 14px;
+  font-size:12px;line-height:1.7;
+  white-space:pre-wrap;word-break:break-word;
+  border-radius:0;
+  max-width:88%;
+}
+.msg.bot .bubble{
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-left:2px solid var(--green-dark);
+  color:var(--text);
+  align-self:flex-start;
+}
+.msg.user .bubble{
+  background:var(--green-dark);
+  border:1px solid #1a4a2a;
+  border-right:2px solid var(--green-dim);
+  color:#aaddbb;
+  align-self:flex-end;
+}
+.msg.sys .bubble{
+  background:transparent;border:none;
+  color:var(--text-muted);font-size:10px;
+  text-align:center;padding:2px 0;
+  align-self:center;letter-spacing:1px;
+}
+
+.typing-dots span{
+  display:inline-block;color:var(--green);
+  animation:blink-t 1s infinite;font-size:16px;
+}
+.typing-dots span:nth-child(2){animation-delay:.2s}
+.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink-t{0%,80%,100%{opacity:.15}40%{opacity:1}}
+
+/* input */
+.input-bar{
+  padding:12px 18px;
+  border-top:1px solid var(--border2);
+  background:var(--bg3);
+  display:flex;align-items:center;gap:10px;
+}
+.prompt{color:var(--green);font-size:14px;letter-spacing:1px;white-space:nowrap;}
+.gc-input{
+  flex:1;
+  background:transparent;
+  border:none;
+  border-bottom:1px solid var(--border2);
+  color:var(--text);
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;
+  padding:4px 6px;
+  outline:none;
+  caret-color:var(--green);
+  transition:border-color .2s;
+}
+.gc-input:focus{border-bottom-color:var(--green);}
+.gc-input::placeholder{color:var(--text-muted);}
+.gc-btn{
+  background:var(--green-dark);
+  border:1px solid var(--green-dim);
+  color:var(--green);
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;letter-spacing:2px;
+  padding:7px 16px;
+  cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.gc-btn:hover{background:#004a22;color:#fff;}
+.gc-btn:disabled{opacity:.3;cursor:not-allowed;}
+.gc-btn-clear{
+  background:transparent;
+  border:1px solid var(--border2);
+  color:var(--text-muted);
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px;letter-spacing:1px;
+  padding:7px 12px;
+  cursor:pointer;
+  transition:border-color .15s;
+}
+.gc-btn-clear:hover{border-color:var(--text-dim);color:var(--text);}
+
+@media (max-width: 700px){
+  .sidebar{width:0;min-width:0;border-right:none;}
+  .sidebar-toggle{display:flex;}
+  .topbar-sub{display:none;}
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar-toggle" id="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('collapsed')">&#9776;</div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-row">
+        <div class="logo-icon">&#9632;</div>
+        <div class="logo-text">GEMBELCHAT</div>
+      </div>
+      <div class="logo-badge">v1.0</div>
+      <div class="sidebar-sub">AI CHAT TERMINAL</div>
+    </div>
+
+    <div class="section-label">// SESSION STATS</div>
+    <div class="stat-grid">
+      <div class="stat-cell">
+        <div class="stat-num ok" id="stat-msg">0</div>
+        <div class="stat-lbl">MESSAGES</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num" id="stat-req">0</div>
+        <div class="stat-lbl">REQUESTS</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num err" id="stat-err">0</div>
+        <div class="stat-lbl">ERRORS</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num" id="stat-time">0s</div>
+        <div class="stat-lbl">LAST RTT</div>
+      </div>
+    </div>
+
+    <div class="section-label">// LIVE LOG</div>
+    <div class="live-log" id="live-log">
+      <div class="log-entry"><span class="lt">--:--:-- </span><span class="li">System boot v1.0</span></div>
+      <div class="log-entry"><span class="lt">--:--:-- </span><span class="lok">AI engine loaded</span></div>
+      <div class="log-entry"><span class="lt">--:--:-- </span><span class="li">Awaiting input...</span></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="dot" id="status-dot"></div>
+      <div class="status-text" id="status-text">IDLE</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">// AI_CHAT_TERMINAL</div>
+        <div class="topbar-sub">MULTI-TURN &bull; CONTEXT-AWARE</div>
+      </div>
+      <div class="topbar-right">
+        <div class="mode-badge">ONLINE</div>
+        <div class="clock" id="clock">00:00:00</div>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+
+      <div class="msg sys"><div class="bubble">-- session initialized -- type to begin --</div></div>
+      <div class="msg bot">
+        <div class="msg-meta"><span class="tag">[BOT]</span> &nbsp;00:00:00 &bull; grok-3-mini</div>
+        <div class="bubble">Yo! GembelChat online nih.&#10;Tanya apa aja — gue siap handle semua request lu, bro. Gas!</div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="prompt">&gt;_&nbsp;</div>
+      <input class="gc-input" id="gc-input" type="text" placeholder="ketik pesan di sini..." autocomplete="off" spellcheck="false"/>
+      <button class="gc-btn-clear" id="gc-clear">CLEAR</button>
+      <button class="gc-btn" id="gc-send">SEND</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const logEl=document.getElementById('live-log');
+const msgEl=document.getElementById('messages');
+const inputEl=document.getElementById('gc-input');
+const sendBtn=document.getElementById('gc-send');
+const clearBtn=document.getElementById('gc-clear');
+const statusDot=document.getElementById('status-dot');
+const statusTxt=document.getElementById('status-text');
+const clockEl=document.getElementById('clock');
+const statMsg=document.getElementById('stat-msg');
+const statReq=document.getElementById('stat-req');
+const statErr=document.getElementById('stat-err');
+const statTime=document.getElementById('stat-time');
+
+let msgCount=0,reqCount=0,errCount=0;
+const chatHistory=[];
+
+function getTime(){return new Date().toTimeString().slice(0,8);}
+function updateClock(){clockEl.textContent=getTime();}
+setInterval(updateClock,1000);updateClock();
+
+function addLog(text,cls='li'){
+  const t=getTime();
+  const d=document.createElement('div');
+  d.className='log-entry';
+  d.innerHTML=`<span class="lt">${t} </span><span class="${cls}">${text}</span>`;
+  logEl.appendChild(d);
+  logEl.scrollTop=logEl.scrollHeight;
+  if(logEl.children.length>120)logEl.removeChild(logEl.firstChild);
+}
+
+function setStatus(s,state='idle'){
+  statusTxt.textContent=s;
+  statusDot.className='dot'+(state==='busy'?' busy':state==='err'?' err':'');
+}
+
+function addMsg(role,html){
+  const w=document.createElement('div');
+  w.className='msg '+role;
+  if(role==='sys'){
+    w.innerHTML=`<div class="bubble">${html}</div>`;
+  } else {
+    const tag=role==='user'?'[YOU]':'[BOT]';
+    const model=role==='bot'?' &bull; grok-3-mini':'';
+    w.innerHTML=`<div class="msg-meta"><span class="tag">${tag}</span> &nbsp;${getTime()}${model}</div><div class="bubble">${html}</div>`;
+  }
+  msgEl.appendChild(w);
+  msgEl.scrollTop=msgEl.scrollHeight;
+  return w;
+}
+
+clearBtn.addEventListener('click',()=>{
+  msgEl.innerHTML='';
+  chatHistory.length=0;
+  msgCount=0;reqCount=0;errCount=0;
+  statMsg.textContent='0';statReq.textContent='0';statErr.textContent='0';statTime.textContent='0s';
+  addMsg('sys','-- session cleared --');
+  addLog('Session cleared','lw');
+  setStatus('IDLE');
+});
+
+async function send(){
+  const txt=inputEl.value.trim();
+  if(!txt||sendBtn.disabled)return;
+  inputEl.value='';
+  sendBtn.disabled=true;
+  setStatus('PROCESSING','busy');
+
+  msgCount++;statMsg.textContent=msgCount;
+  reqCount++;statReq.textContent=reqCount;
+  addLog(`INPUT[${reqCount}]: ${txt.slice(0,28)}${txt.length>28?'...':''}`, 'lu');
+
+  addMsg('user', txt.replace(/</g,'&lt;'));
+  chatHistory.push({role:'user',content:txt});
+
+  const typingRow=addMsg('bot','<span class="typing-dots"><span>&#9608;</span><span>&#9608;</span><span>&#9608;</span></span>');
+  addLog('Sending to AI engine...','li');
+  const t0=Date.now();
+
+  try{
+    const messages_with_system = [
+      {role:'system', content:'Kamu adalah AI assistant yang santai, gaul, dan helpful. Jawab dalam Bahasa Indonesia yang asik dan natural. Singkat dan padat kecuali diminta detail. Jangan pake markdown, tulis plain text aja.'},
+      ...chatHistory
+    ];
+    const res=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'grok-3-mini',
+        max_tokens:1000,
+        messages: messages_with_system
+      })
+    });
+    const data=await res.json();
+    const rtt=Math.round((Date.now()-t0)/100)/10;
+    statTime.textContent=rtt+'s';
+    const reply=data.choices?.[0]?.message?.content||data.error?.message||JSON.stringify(data)||'ERROR: null response';
+    typingRow.remove();
+    msgCount++;statMsg.textContent=msgCount;
+    addMsg('bot', reply.replace(/</g,'&lt;'));
+    chatHistory.push({role:'assistant',content:reply});
+    addLog(`OK [${rtt}s] ${reply.length} chars`,'lok');
+    setStatus('IDLE','idle');
+  }catch(e){
+    const rtt=Math.round((Date.now()-t0)/100)/10;
+    typingRow.remove();
+    errCount++;statErr.textContent=errCount;statTime.textContent=rtt+'s';
+    const errMsg = e.message||'';
+    if(errMsg.includes('401')||errMsg.includes('auth')){
+      addMsg('bot','ERROR: API key xAI salah atau expired. Klik [KEY] untuk ganti.');
+    } else {
+      addMsg('bot','ERROR: Koneksi gagal — ' + (errMsg||'unknown error'));
+    }
+    console.error('Fetch error:', e);
+    addLog('FAIL: fetch error','le');
+    setStatus('ERROR','err');
+    setTimeout(()=>setStatus('IDLE','idle'),3000);
+  }
+  sendBtn.disabled=false;
+  inputEl.focus();
+}
+
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', function(e){ if(e.key==='Enter') send(); });
+
+inputEl.focus();
+
+
+const idleMsgs=['Monitoring...','Listening...','Idle...','Ready...','Standby...'];
+setInterval(()=>{
+  if(statusTxt.textContent==='IDLE'){
+    addLog(idleMsgs[Math.floor(Math.random()*idleMsgs.length)],'li');
+  }
+},10000);
+</script>
+
+
+
+</body>
+</html>
